@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Some CLAS12/CVMFS environments export PYTHONHOME/PYTHONPATH values that
+# point to a different Python runtime than the one bundled with the local
+# SCons launcher. That breaks SCons before it can read SConstruct with:
+#   ModuleNotFoundError: No module named 'encodings'
+#
+# Run SCons with a clean Python environment to avoid version-mismatch crashes.
+
+if [[ $# -eq 0 ]]; then
+  set -- .
+fi
+
+for candidate in scons-2.9 scons-2.8 scons-2.7 scons; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    exec env -u PYTHONHOME -u PYTHONPATH "$candidate" "$@"
+  fi
+done
+
+echo "Error: no scons executable found in PATH (tried scons-2.9, scons-2.8, scons-2.7, scons)." >&2
+exit 127
