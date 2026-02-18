@@ -25,9 +25,11 @@ git clone https://github.com/JeffersonLab/exclurad.git
 ## Build the executable
 ```
 cd exclurad/exclurad
-scons-2.7
-
+./scons-safe
 ```
+
+If your site environment sets `PYTHONHOME`/`PYTHONPATH` (for example via CVMFS views), plain `scons` may fail with `ModuleNotFoundError: No module named encodings`. The `scons-safe` helper in `exclurad/` unsets those variables only for the SCons process.
+
 ## Example input file (input.dat):
 
 ```
@@ -53,4 +55,103 @@ scons-2.7
 ./build/exclurad.exe < input.dat
 
 ```
+
+The program reads configuration from standard input. You can therefore run any input file via shell redirection, for example `./build/exclurad.exe < phi.dat`.
+
+## Why a run may stop with only `v1/v2` lines
+If output stops after lines like:
+
+```
+v1= ... Q2 min= ... Q2 max= ...
+v2= ... W  min= ... W  max= ...
+```
+
+then your kinematics are outside the MAID interpolation grid. For MAID tables in this repository, the printed limits are typically `0 <= Q2 <= 5` and `1.08 <= W <= 2.0`.
+
+For example, `W=2.2` is out of range, so no radiative-correction rows are produced. Use `W <= 2.0` and valid `Q2` values to get output files (`radcor.dat`, `radsigpl.dat`, `radsigmi.dat`, ...).
+
+A ready-to-run scan file is provided as `exclurad/phi_scan.dat`.
+
+## Analyze and plot outputs
+A helper script is provided at `exclurad/tools/analyze_radcor.py`.
+
+Example:
+
+```
+cd exclurad
+./build/exclurad.exe < phi_scan.dat
+python3 tools/analyze_radcor.py --dir . --ebeam 10.6 --ivec 1 --out plots
+```
+
+This creates quick-look PNG figures including RC factors vs `Q2`, `W`, `phi`, `cos(theta)`, `y`, and approximate `t`.
+
+## External structure-function mode (no MAID)
+If you want RCs for reactions outside MAID (e.g. exclusive phi), use `iphy=4`.
+In this mode EXCLURAD does **not** read MAID multipole tables. Instead it reads an external table of hadronic structure functions with 8 columns per row:
+
+`Q2  W  cos(theta_cm)  sigma_T  sigma_L  sigma_TT  sigma_LT  sigma_LTp`
+
+Notes:
+- Set `ivec=3` (detected proton, phi recoil) or `ivec=4` (detected phi, proton recoil).
+- Point the code to your table via:
+  `export EXCLURAD_SF_TABLE=/path/to/your_sf_table.tbl`
+- A template input file is provided: `exclurad/phi_external.dat`
+- A format example is provided: `exclurad/external_sf_phi_example.tbl`
+
+Example:
+
+```
+cd exclurad
+export EXCLURAD_SF_TABLE=external_sf_phi_example.tbl
+./build/exclurad.exe < phi_external.dat
+```
+
+## Using newer MAID tables
+By default the code loads bundled table names (`maid98-*.tbl`, `maid07-*.tbl`).
+You can override those paths at runtime with environment variables:
+
+- `EXCLURAD_MAID98_PPPI`
+- `EXCLURAD_MAID98_PNPI`
+- `EXCLURAD_MAID07_PPPI`
+- `EXCLURAD_MAID07_PNPI`
+- `EXCLURAD_MAID07_NPPI`
+
+Example:
+
+```
+export EXCLURAD_MAID07_PPPI=/path/to/new/maid07-PPpi.tbl
+./build/exclurad.exe < phi_scan.dat
+```
+
+This lets you test newer/reprocessed MAID-style pion tables without editing source.
+
+## About phi-meson electroproduction
+There are now two approaches:
+- **MAID/AO modes** (`iphy=1,2,3`): these are pion-model based.
+- **External SF mode** (`iphy=4`): provides MAID-free RC evaluation from user-supplied structure functions, and is the recommended path for exclusive phi studies.
+
+For phi production, provide a physically validated external table of
+`(Q2, W, cos(theta_cm), sigma_T, sigma_L, sigma_TT, sigma_LT, sigma_LTp)`
+at your kinematics.
+
+## Troubleshooting SCons/Python startup errors
+If you see an error similar to:
+
+```
+Fatal Python error: init_fs_encoding
+ModuleNotFoundError: No module named 'encodings'
+```
+
+run SCons via the wrapper script:
+
+```
+./scons-safe
+```
+
+Equivalent one-liner if you prefer not to use the script:
+
+```
+env -u PYTHONHOME -u PYTHONPATH scons-2.9
+```
+
 
