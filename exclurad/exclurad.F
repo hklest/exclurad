@@ -33,7 +33,9 @@ c
 	 open(unit=42,file='radsigmi.dat',status='unknown')
 	 open(unit=27,file='radasm.dat',status='unknown')
 	 open(unit=28,file='radtot.dat',status='unknown')
-	 open(unit=5,file='input.dat',status='old')
+c	 unit 5 is standard input; keep it preconnected so users can pass
+c	 alternative files via shell redirection, e.g.:
+c	   ./build/exclurad.exe < phi.dat
 
 	  read(5,*)iphy
 	  read(5,*)ll
@@ -97,10 +99,10 @@ c	     if(intphi.ne.1)stop 'intphi must be =1 for npoi=0'
 	w=w_input(i)
 	q2=q2_input(i)
 
-	if(ivec.eq.1)then
+	if(ivec.eq.1.or.ivec.eq.3)then
 	  cosh= -cscm_input(i)
 	  phih=pi+phicm_input(i)*pi/180d0
-	elseif(ivec.eq.2)then
+	elseif(ivec.eq.2.or.ivec.eq.4)then
 	  cosh=  cscm_input(i)
 	  phih=phicm_input(i)*pi/180d0
 	endif
@@ -197,10 +199,18 @@ c      write(*,'(8f8.5)') extai1-1.,alpha/pi*(deltavr+sum),tai/sib
       subroutine setcon(ivec,lepton)
       implicit real*8(a-h,o-z)
       common/cmp/pi,alpha,amp,amp2,ap,ap2,aml2,amu2,amh2,barn
-      parameter(ncases=2)
+      parameter(ncases=4)
       dimension amhad(ncases),amunm(ncases)
-      data amhad/0.938272d0,0.13957d0/
-      data amunm/0.13957d0,0.938272d0/
+      data amhad/0.938272d0,0.13957d0,0.938272d0,1.019461d0/
+      data amunm/0.13957d0,0.938272d0,1.019461d0,0.938272d0/
+
+      if(ivec.lt.1.or.ivec.gt.ncases)then
+        write(6,*) 'ERROR: ivec=',ivec,' is not supported.'
+        write(6,*) 'Supported channels:'
+        write(6,*) '  ivec=1 p (pi recoil), ivec=2 pi+ (p recoil),'
+        write(6,*) '  ivec=3 p (phi recoil), ivec=4 phi (p recoil).'
+        stop 'Unsupported channel selection'
+      endif
 
       if(lepton.eq.1)aml2=.261112d-6
       if(lepton.eq.2)aml2=.111637d-1
@@ -286,6 +296,7 @@ c     write(*,'(a8,2g11.3)')' test8: ',w2+amh2-2.*w*eeh0,amu2
 ****************** borntest *************************************
       subroutine borntest(bmom,w,q2,csin,phih,sig0bu,sig0bp,eps_d)
       implicit real*8(a-h,o-z)
+      integer iepi
       common/cmp/pi,alpha,amp,amp2,ap,ap2,aml2,amu2,amh2,barn
       common/keys/ivec,iphy
 
@@ -295,8 +306,12 @@ c     write(*,'(a8,2g11.3)')' test8: ',w2+amh2-2.*w*eeh0,amu2
 	the_e = acos(cthe)
 	eps_d= 1d0/(1d0+2d0*(1d0+enu*enu/q2)*tan(0.5d0*the_e)**2)
 
+	iepi = 2*ivec-1
+	if (ivec.eq.3) iepi = 101
+	if (ivec.eq.4) iepi = 102
+
 	call phy_model(iphy,q2,w,csin
-     .	 ,2*ivec-1,sig_t,sig_l,sig_tt,sig_lt,sig_ltp)
+     .	 ,iepi,sig_t,sig_l,sig_tt,sig_lt,sig_ltp)
 
 c	write(*,'(5g12.4)')q2,w,csin
 c	 write(*,'(5g12.4)')sig_t,sig_l,sig_tt,sig_lt,sig_ltp
@@ -753,12 +768,15 @@ c     pause
 
       subroutine sffun(sfm,q2,w2,t)
       implicit real*8(a-h,o-z)
+      integer iepi
       dimension sfm(5)
       common/keys/ivec,iphy
       common/cmp/pi,alpha,amp,amp2,ap,ap2,aml2,amu2,amh2,barn
 
       sqw2=sqrt(w2)
       iepi=2*ivec-1
+      if (ivec.eq.3) iepi=101
+      if (ivec.eq.4) iepi=102
 
       sx=w2+q2-amp2
       aly=sx**2+4.*amp2*q2
@@ -772,9 +790,9 @@ c     pause
 
 c      write(22,'(7g11.3)')q2,w2,t
 
-      if(ivec.eq.1)then
+      if(ivec.eq.1.or.ivec.eq.3)then
 	cspion=-csthcm
-      elseif(ivec.eq.2)then
+      elseif(ivec.eq.2.or.ivec.eq.4)then
 	cspion= csthcm
       endif
 
@@ -832,6 +850,9 @@ c
       if (iphy.eq.1) then
 	call ao_model(hQ2,hW,0.5,hcs,0.0,iepi,
      *	     sigma0,sig_t,sig_tt,sig_l,sig_lt,sig_ltp)
+      elseif (iphy.eq.4) then
+	call extsf_model(q2,w,csthcm,iepi,st,sl,stt,slt,sltp)
+	return
       else
 	call maid_lee(iphy,hQ2,hW,0.5,hcs,0.0,iepi,
      *	     sigma0,sig_t,sig_tt,sig_l,sig_lt,sig_ltp)
@@ -850,6 +871,106 @@ c	endif
       slt=dble(sig_lt)
       sltp=dble(sig_ltp)
 
+      end
+
+
+      subroutine extsf_model(q2,w,csthcm,iepi,st,sl,stt,slt,sltp)
+      implicit real*8(a-h,o-z)
+      integer iepi
+      integer nmax
+      parameter(nmax=300000)
+      integer npts, i
+      real*8 q2a(nmax), wa(nmax), ca(nmax), sta(nmax), sla(nmax)
+      real*8 stta(nmax), slta(nmax), sltpa(nmax)
+      real*8 d2, d2best, sq, sw, sc, wgt, wsum
+      real*8 q2min,q2max,wmin,wmax,cmin,cmax
+      character*132 sfpath
+      logical loaded
+      common /extsf_db/ q2a,wa,ca,sta,sla,stta,slta,sltpa,
+     . npts,q2min,q2max,wmin,wmax,cmin,cmax,loaded
+      save /extsf_db/
+      data loaded /.false./
+
+      if (.not.loaded) then
+        sfpath = 'external_sf.tbl'
+        call getenv('EXCLURAD_SF_TABLE',sfpath)
+        open(unit=63,file=sfpath,status='old',err=900)
+        npts = 0
+        do i=1,nmax
+          read(63,*,end=100,err=901) q2a(i),wa(i),ca(i),sta(i),sla(i),
+     .      stta(i),slta(i),sltpa(i)
+          npts = i
+        enddo
+ 100    close(63)
+        if (npts.le.0) stop 'External SF table is empty'
+        q2min=q2a(1)
+        q2max=q2a(1)
+        wmin=wa(1)
+        wmax=wa(1)
+        cmin=ca(1)
+        cmax=ca(1)
+        do i=2,npts
+          q2min=min(q2min,q2a(i))
+          q2max=max(q2max,q2a(i))
+          wmin=min(wmin,wa(i))
+          wmax=max(wmax,wa(i))
+          cmin=min(cmin,ca(i))
+          cmax=max(cmax,ca(i))
+        enddo
+        loaded=.true.
+        write(6,*) 'iphy=4 external SF mode'
+        write(6,*) 'Reading structure functions from ',sfpath
+      endif
+
+      if (iepi.ne.101.and.iepi.ne.102) then
+        write(6,*) 'ERROR: iphy=4 is intended for phi channels only.'
+        write(6,*) 'Use ivec=3 (p detected) or ivec=4 (phi detected).'
+        stop 'iphy=4 requires phi-like ivec'
+      endif
+
+      sq=max(1d-8,(q2max-q2min))
+      sw=max(1d-8,(wmax-wmin))
+      sc=max(1d-8,(cmax-cmin))
+
+      st=0d0
+      sl=0d0
+      stt=0d0
+      slt=0d0
+      sltp=0d0
+      wsum=0d0
+      d2best=1d99
+      do i=1,npts
+        d2=((q2-q2a(i))/sq)**2 + ((w-wa(i))/sw)**2 + ((csthcm-ca(i))/sc)**2
+        d2best=min(d2best,d2)
+        wgt=1d0/(d2+1d-12)
+        wsum=wsum+wgt
+        st=st+wgt*sta(i)
+        sl=sl+wgt*sla(i)
+        stt=stt+wgt*stta(i)
+        slt=slt+wgt*slta(i)
+        sltp=sltp+wgt*sltpa(i)
+      enddo
+
+      if (wsum.le.0d0) stop 'External SF interpolation failed'
+      st=st/wsum
+      sl=sl/wsum
+      stt=stt/wsum
+      slt=slt/wsum
+      sltp=sltp/wsum
+
+      if (d2best.gt.0.25d0) then
+        write(6,*) 'WARNING: requested point is far from external SF nodes.'
+        write(6,*) ' q2=',q2,' w=',w,' cos=',csthcm
+      endif
+
+      return
+
+ 900  write(6,*) 'ERROR: could not open external SF table: ',sfpath
+      stop 'Missing EXCLURAD_SF_TABLE file'
+ 901  write(6,*) 'ERROR while reading external SF table.'
+      write(6,*) 'Expected 8 columns per row:'
+      write(6,*) 'Q2 W cos(theta_cm) sigma_T sigma_L sigma_TT sigma_LT sigma_LTp'
+      stop 'Bad EXCLURAD_SF_TABLE format'
       end
 
 
@@ -4006,6 +4127,7 @@ C
       if (v1.gt.var1_max) then
 c	write(6,'(a,2(1x,e15.8))')' FATAL ERROR: var1 .gt. max - ',v1,var1_max
 c	STOP
+	     goto 1
 
       endif
 
@@ -4170,9 +4292,10 @@ C
  1    do mpp = 1,max_mp
 	 vec_f(mpp) = 0.0
       enddo
+      write(6,'(a)') 'ERROR: requested point is outside MAID grid limits.'
       print *, 'v1= ',v1,' Q2 min= ',var1_min,' Q2 max= ',var1_max
       print *, 'v2= ',v2,' W  min= ',var2_min,' W  max= ',var2_max
-      stop
+      stop 'Kinematics outside model grid'
 C
       return
       end
@@ -4264,6 +4387,11 @@ c
           data_file = 'maid07-NPpi.tbl'
 	endif
       endif
+
+c Optional table overrides via environment variables:
+c   EXCLURAD_MAID98_PPPI, EXCLURAD_MAID98_PNPI,
+c   EXCLURAD_MAID07_PPPI, EXCLURAD_MAID07_PNPI, EXCLURAD_MAID07_NPPI
+      call maid_table_override(iphy,channel_opt,data_file)
 c
       print *, 'iphy=', iphy
       write(6,*) 'Reading multipoles from ',data_file
@@ -4304,6 +4432,32 @@ cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       sig_ltp = sigma_ltp
 
 c      print *, 'MAID-LEE',sigma0,sigu,sigl,sigt,sigi
+
+      return
+      end
+
+      subroutine maid_table_override(iphy,channel_opt,data_file)
+      implicit none
+      integer iphy, channel_opt
+      character*(*) data_file
+      character*132 tab
+
+      tab = ' '
+      if (iphy.eq.2 .and. channel_opt.eq.1) then
+        call getenv('EXCLURAD_MAID98_PPPI',tab)
+      elseif (iphy.eq.2 .and. channel_opt.eq.3) then
+        call getenv('EXCLURAD_MAID98_PNPI',tab)
+      elseif (iphy.eq.3 .and. channel_opt.eq.1) then
+        call getenv('EXCLURAD_MAID07_PPPI',tab)
+      elseif (iphy.eq.3 .and. channel_opt.eq.3) then
+        call getenv('EXCLURAD_MAID07_PNPI',tab)
+      elseif (iphy.eq.3 .and. channel_opt.eq.2) then
+        call getenv('EXCLURAD_MAID07_NPPI',tab)
+      endif
+
+      if (tab.ne.' ') then
+        data_file = tab
+      endif
 
       return
       end
