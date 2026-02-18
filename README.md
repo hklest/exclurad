@@ -106,6 +106,43 @@ export EXCLURAD_SF_TABLE=external_sf_phi_example.tbl
 ./build/exclurad.exe < phi_external.dat
 ```
 
+### External SF input format details
+Each row in `EXCLURAD_SF_TABLE` represents one kinematic node:
+
+`Q2  W  cos(theta_cm)  sigma_T  sigma_L  sigma_TT  sigma_LT  sigma_LTp`
+
+Where:
+- `Q2` is in GeV^2
+- `W` is in GeV
+- `cos(theta_cm)` is the hadron CM polar angle cosine
+- `sigma_*` should be in a **consistent** cross-section unit across all terms (typically microbarn/sr in electroproduction conventions)
+
+In the RC kernel, these are combined as:
+
+`sigma0 = sigma_T + eps*sigma_L + eps*sigma_TT*cos(2phi) + sqrt(eps*(eps+1)/2)*sigma_LT*cos(phi)`
+
+(and polarized term uses `sigma_LTp`).
+
+So if your theory provides only `sigma_T` and `sigma_L`, you can still run by setting:
+- `sigma_TT = 0`
+- `sigma_LT = 0`
+- `sigma_LTp = 0`
+
+This gives RCs for a reduced structure-function model (no transverse-transverse / longitudinal-transverse interference terms).
+
+### Converting theory tables with only sigma_T and sigma_L
+Use:
+
+```bash
+python3 exclurad/tools/prepare_external_sf.py   --infile my_theory_ST_SL.tbl   --outfile external_sf.tbl
+```
+
+Input rows for this helper can be either:
+- 5 columns: `Q2 W cos(theta_cm) sigma_T sigma_L`
+- 8 columns: full EXCLURAD format
+
+For 5-column rows, `sigma_TT`, `sigma_LT`, and `sigma_LTp` are filled with defaults (0.0 unless overridden).
+
 ## Using newer MAID tables
 By default the code loads bundled table names (`maid98-*.tbl`, `maid07-*.tbl`).
 You can override those paths at runtime with environment variables:
@@ -133,6 +170,25 @@ There are now two approaches:
 For phi production, provide a physically validated external table of
 `(Q2, W, cos(theta_cm), sigma_T, sigma_L, sigma_TT, sigma_LT, sigma_LTp)`
 at your kinematics.
+
+## Keep your local checkout updated
+A helper script is included to pull updates safely:
+
+```bash
+./scripts/update_from_git.sh
+```
+
+Useful options:
+- `--remote origin` (default: `origin`)
+- `--branch main` (default: current branch)
+- `--stash` to auto-stash local uncommitted changes before updating
+
+Examples:
+
+```bash
+./scripts/update_from_git.sh --remote origin --branch main
+./scripts/update_from_git.sh --stash
+```
 
 ## Troubleshooting SCons/Python startup errors
 If you see an error similar to:
