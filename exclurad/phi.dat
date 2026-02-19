@@ -1,0 +1,13 @@
+3       ! iphy: 1 AO, 2 MAID98, 3 MAID2007
+0       ! ll: 0 Full, 1 Factorizable+LL
+10.6    ! bmom [GeV]
+1.0     ! tmom [GeV/c]
+1       ! lepton: 1 electron
+1       ! ivec: detected hadron (1) p, (2) pi+
+0.05    ! vcut
+
+1       ! no. of points
+1.50    ! W values (must be within MAID table range)
+3.40    ! Q^2 values
+0.00    ! cos(theta_cm)
+0.00    ! phi_cm [deg]

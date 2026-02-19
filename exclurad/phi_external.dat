@@ -1,0 +1,13 @@
+4       ! iphy: 4 = external structure-function table mode (no MAID)
+0       ! ll: 0 Full, 1 Factorizable+LL
+10.6    ! bmom [GeV]
+1.0     ! tmom [GeV/c]
+1       ! lepton: 1 electron, 2 muon
+4       ! ivec: 3 (p detected, phi recoil) or 4 (phi detected, p recoil)
+0.05    ! vcut
+
+6       ! number of points
+2.00 2.00 2.00 2.20 2.20 2.20
+1.00 1.50 2.00 1.00 1.50 2.00
+-0.5 0.0 0.5 -0.5 0.0 0.5
+0.0 45.0 90.0 0.0 45.0 90.0
